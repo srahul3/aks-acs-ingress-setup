@@ -1,0 +1,85 @@
+version: 0.1.0   
+
+name: "Azure Kubernetes Service (AKS) environment setup and configure"
+description: "Azure Kubernetes Service (AKS) environment setup and configure"
+
+branding:
+ icon: 'cloud'
+ color: 'blue'
+
+inputs:
+  - name: AZURE_CLIENT_ID
+    description: Enter your Azure AD app client ID. To know more about acquiring this key, read https://docs.github.com/en/actions/deployment/security-hardening-your-deployments/configuring-openid-connect-in-azure. This will be stored as a secret
+    is-secret: true
+    required: true
+    
+  - name: AZURE_TENANT_ID
+    description: Enter your Azure AD app teanant ID. To know more about acquiring this key, read https://docs.github.com/en/actions/deployment/security-hardening-your-deployments/configuring-openid-connect-in-azure. This will be stored as a secret
+    is-secret: true
+    required: true
+
+  - name: AZURE_SUBSCRIPTION_ID
+    description: Enter your Azure subscription ID. To know more about acquiring this key, read https://docs.github.com/en/actions/deployment/security-hardening-your-deployments/configuring-openid-connect-in-azure. This will be stored as a secret
+    is-secret: true
+    required: true
+
+  - name: AZURE_RESOURCE_GROUP
+    description: A new/existing resource group to which all the newly created rersouces will be associated
+    is-secret: true
+    required: true
+
+  - name: AKS_NAME
+    description: "Name of Azure Kubernetes Service cluster. Note: The name must be lower case and without special charater"
+    is-secret: true
+    required: true    
+    
+  - name: ACR_NAME
+    description: "Name of Azure Container Registry. Note: The name must be lower case and without special charater"
+    is-secret: true
+    required: true
+
+  - name: AZURE_LOCATION  
+    description: A region 'Name', where the new resources will be created. Execute the command 'az account list-locations -o table' to know more about other valid regions.
+    default: "centralindia"
+    is-secret: true
+    required: true
+    
+configs:
+  repo-metadata:
+    parameters:
+      description: 'NextJS app on GH pages'
+      secrets: 
+        - name: AZURE_CLIENT_ID
+          value: ${{inputs.AZURE_CLIENT_ID}}
+        - name: AZURE_TENANT_ID
+          value: ${{inputs.AZURE_TENANT_ID}}
+        - name: AZURE_SUBSCRIPTION_ID
+          value: ${{inputs.AZURE_SUBSCRIPTION_ID}}
+        - name: AZURE_RESOURCE_GROUP
+          value: ${{inputs.AZURE_RESOURCE_GROUP}}
+        - name: AKS_NAME
+          value: ${{inputs.AKS_NAME}}
+        - name: ACR_NAME
+          value: ${{inputs.ACR_NAME}}
+        - name: AZURE_LOCATION
+          value: ${{inputs.AZURE_LOCATION}}
+      topics:
+      - AKS
+      - ACR
+      - Ingress-controller
+      
+  branches:
+    - name: main
+      parameters:
+        enforce-admins: true
+
+  environments:
+    - name: development
+      parameters:
+        protected-branches: false
+        allowed-branch-rules:
+          - main
+          - releases/*
+          
+init:
+  uses: "stack-init.yml"
