@@ -46,8 +46,7 @@ inputs:
     
 configs:
   repo-metadata:
-    parameters:
-      description: 'NextJS app on GH pages'
+    parameters:      
       secrets: 
         - name: AZURE_CLIENT_ID
           value: ${{inputs.AZURE_CLIENT_ID}}
@@ -64,9 +63,9 @@ configs:
         - name: AZURE_LOCATION
           value: ${{inputs.AZURE_LOCATION}}
       topics:
-      - AKS
-      - ACR
-      - Ingress-controller
+      - aks
+      - car
+      - ingress-controller
       
   branches:
     - name: main
