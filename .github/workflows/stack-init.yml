@@ -1,0 +1,134 @@
+name: "Azure Kubernetes Service (AKS) environment setup and configure"
+
+on: [workflow_dispatch]
+
+permissions:
+  id-token: write
+  contents: write
+  
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@master
+    
+    - name: Azure Login
+      uses: azure/login@v1
+      with:
+        client-id: ${{ secrets.AZURE_CLIENT_ID }}
+        tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+        subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+    
+    - name: Create ACR
+      id: create-acr
+      run: |
+        az group create --name ${{ secrets.AZURE_RESOURCE_GROUP }} --location ${{ secrets.AZURE_LOCATION }}
+        az acr create -n ${{ secrets.ACR_NAME }} -g ${{ secrets.AZURE_RESOURCE_GROUP }} --location ${{ secrets.AZURE_LOCATION }} --sku Basic --admin-enabled
+        echo "::set-output name=acr_username::`az acr credential show -n ${{ secrets.ACR_NAME }} --query username | xargs`"
+        echo "::set-output name=acr_password::`az acr credential show -n ${{ secrets.ACR_NAME }} --query passwords[0].value | xargs`"
+        echo "::add-mask::`az acr credential show -n ${{ secrets.ACR_NAME }} --query passwords[0].value | xargs`"        
+    
+    - name: Create network
+      id: nw
+      run: |     
+        AZURE_RESOURCE_GROUP=${{ secrets.AZURE_RESOURCE_GROUP }}
+        AKS_VNET=aks-vnet
+        AKS_VNET_ADDRESS_PREFIX=10.0.0.0/8
+        AKS_VNET_SUBNET_DEFAULT=aks-subnet-default
+        AKS_VNET_SUBNET_DEFAULT_PREFIX=10.240.0.0/16
+        AKS_VNET_SUBNET_VIRTUALNODES=aks-subnet-virtual-nodes
+        AKS_VNET_SUBNET_VIRTUALNODES_PREFIX=10.241.0.0/16
+        AKS_LOCATION=${{ secrets.AZURE_LOCATION }}        
+        az network vnet create -g ${AZURE_RESOURCE_GROUP} \
+                       -n ${AKS_VNET} \
+                       --address-prefix 10.0.0.0/8 \
+                       --subnet-name aks-subnet-default \
+                       --subnet-prefix 10.240.0.0/16 \
+                       --location ${AKS_LOCATION}
+        az network vnet subnet create \
+                      --resource-group ${AZURE_RESOURCE_GROUP} \
+                      --vnet-name ${AKS_VNET} \
+                      --name ${AKS_VNET_SUBNET_VIRTUALNODES} \
+                      --address-prefixes ${AKS_VNET_SUBNET_VIRTUALNODES_PREFIX}
+        AKS_VNET_SUBNET_DEFAULT_ID=$(az network vnet subnet show \
+                           --resource-group ${AZURE_RESOURCE_GROUP} \
+                           --vnet-name ${AKS_VNET} \
+                           --name ${AKS_VNET_SUBNET_DEFAULT} \
+                           --query id \
+                           -o tsv)
+        echo ${AKS_VNET_SUBNET_DEFAULT_ID}
+        
+    - name: AKS Exist?
+      id: chkaks
+      continue-on-error: true
+      run: |        
+        echo ::set-output name=status::failure
+        aksRg=$(az aks show --resource-group ${{ secrets.AZURE_RESOURCE_GROUP }} --name ${{ secrets.AKS_NAME }} --query name -o json)
+        echo ::set-output name=status::success
+        aksClusterExists = ${aksRg} -gt 0      
+        [ "${aksClusterExists}" == "false" ] && echo ::set-output name=status::failure        
+    
+    - name: Create AKS
+      id: createaks    
+      if: steps.chkaks.outputs.status == 'failure'        
+      run: |        
+        az aks create -g ${{ secrets.AZURE_RESOURCE_GROUP }} -n ${{ secrets.AKS_NAME }} --node-count 2 --location ${{ secrets.AZ_LOCATION }} --generate-ssh-keys        
+        
+    - name: Get AKS Resource Group
+      id: aksrg      
+      run: |                
+        aksRg=$(az aks show --resource-group ${{ secrets.AZURE_RESOURCE_GROUP }} --name ${{ secrets.AKS_NAME }} --query nodeResourceGroup -o tsv)
+        echo "Aks resource group: ${aksRg}"
+        echo "::set-output name=aksRg::`echo ${aksRg}`"
+        
+    - name: Create Public IP
+      id: crpip
+      run: |     
+        AKS_RESOURCE_GROUP=${{ steps.aksrg.outputs.aksRg }}
+        AKS_LOCATION=${{ secrets.AZ_LOCATION }}
+        DNSNAME=srahul3voting
+        echo "Aks resource group: ${AKS_RESOURCE_GROUP}"
+        PIP=$(az network public-ip create \
+                          --resource-group ${AKS_RESOURCE_GROUP} \
+                          --name ${{ secrets.AKS_NAME }}-pip \
+                          --sku Standard \
+                          --allocation-method static \
+                          --location ${AKS_LOCATION} \
+                          --query publicIp.ipAddress -o tsv)
+        PUBLICIPID=$(az network public-ip list --query "[?ipAddress!=null]|[?contains(ipAddress, '${PIP}')].[id]" --output tsv)
+        az network public-ip update --ids ${PUBLICIPID} --dns-name ${DNSNAME}
+        dnsName=$(az network public-ip show --ids ${PUBLICIPID} --query dnsSettings.fqdn -o tsv)        
+        echo ${dns-name}
+        echo ${PIP}
+        echo "::set-output name=pip::`echo ${PIP}`"
+        echo "::set-output name=dns::`echo ${dnsName}`"    
+     
+    - name: Configure ingress controller
+      id: configure-ingress
+      run: |
+        echo ${{ steps.crpip.outputs.pip }}                
+        brew install helm
+        echo "Installing kubectl"
+        az aks get-credentials --resource-group ${{ secrets.AZURE_RESOURCE_GROUP }} --name ${{ secrets.AKS_NAME }}
+        name_space=${{ secrets.AKS_NAME }}-ingress-basic
+        kubectl create namespace ${name_space} --dry-run=client
+        helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx
+        helm repo update
+        helm install ingress-nginx ingress-nginx/ingress-nginx \
+          --namespace ${name_space} \
+          --set controller.replicaCount=2 \
+          --set controller.nodeSelector."beta\.kubernetes\.io/os"=linux \
+          --set defaultBackend.nodeSelector."beta\.kubernetes\.io/os"=linux \
+          --set controller.service.loadBalancerIP="${{ steps.crpip.outputs.pip }}"
+        echo "::set-output name=name_space::`echo ${name_space}`"
+        
+    - name: Show AKS services        
+      run: |
+        kubectl get service -l app=nginx-ingress --namespace ${{ steps.configure-ingress.outputs.name_space }}
+                        
+    - name: Exports
+      id: exports          
+      run: |        
+        echo AKS_STATIC_IP ${{ steps.crpip.outputs.pip }}
+        echo AKS_DNS_NAME ${{ steps.crpip.outputs.dns }}
+        
