@@ -1,4 +1,4 @@
-[![Use this template](https://github.com/stack-instance/badge.svg)](https://github.com/stack-instance?stack_template_owner=srahul3&stack_template_repo=AKS_ACR_setup_with_ingress)
+[![Use this template](https://github.com/stack-instance/badge.svg)](https://github.com/stack-instance?stack_template_owner=srahul3&stack_template_repo=aks-acs-ingress-setup)
 
 <p>
     <img src="https://code.benco.io/icon-collection/azure-docs/kubernetes-services.svg" alt="AKS" width="50" height ="50"/>
