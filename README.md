@@ -48,6 +48,12 @@ The stack will configure the complete development ecosystem of AKS which is requ
 None
 ```
 
+## Sample Kubernetes applications which works on this setup
+
+[![Use this stack](https://github.com/stack-instance/badge.svg)](https://github.com/stack-instance?stack_template_owner=srahul3&stack_template_repo=backend-express-voting-mongo-aks) Sample voting backend application developed using Node JS and Express JS
+                
+[![Use this stack](https://github.com/stack-instance/badge.svg)](https://github.com/stack-instance?stack_template_owner=srahul3&stack_template_repo=frontend-react-voting-aks) Sample voting frontend application developed using Reactjs
+                
 ## Learn more 
 
 ### Azure Kubernetes Service (AKS)
